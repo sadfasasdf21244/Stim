@@ -84,40 +84,26 @@ class TransmonBuilder:
     def get_circuit(self):
         return self.circuit    
     
-    def measure_all(self, is_first_round=False):
-        if is_first_round:
-            # 첫 라운드는 이전 기록이 없으므로 그냥 하드 리셋(R) 후 시작
-            # (시뮬레이션 시작 시점엔 보통 0이므로 R을 생략하기도 하지만, 명시적으로 넣음)
-            self.circuit.append("R", ANCILLA_QUBITS)
-        else:
-            # 2번째 라운드부터는 이전 측정 결과(rec)를 이용해 Active Reset 수행
-            # 인덱스 로직: 바로 직전 라운드 끝에서 A2, A1, A3 순으로 측정했다고 가정
-            # rec[-3]: A2, rec[-2]: A1, rec[-1]: A3
-            self.circuit.append("CX", [stim.target_rec(-3), A2])
-            self.circuit.append("CX", [stim.target_rec(-2), A1])
-            self.circuit.append("CX", [stim.target_rec(-1), A3])
-            # Active Reset 동작 중 발생하는 노이즈 (또는 대기 시간 노이즈)
-            self._add_noise_1q(A2)
-            self._add_noise_1q(A1)
-            self._add_noise_1q(A3)
-
-        self.pi_half_y(D1)
-        self.pi_half_y(D2)
-        self.pi_half_y(D3)
-        self.pi_half_y(D4)
-
-        self.pi_half_y(A2) 
+    def measure_all(self, is_first_round = False, A2_basis = 'X'):
+        if A2_basis == 'X':
+            self.pi_half_y(D1)
+            self.pi_half_y(D2)
+            self.pi_half_y(D3)
+            self.pi_half_y(D4)
+        
+        self.minus_pi_half_y(A2) 
         self.cz(D1, A2)
         self.cz(D2, A2)
         self.cz(D3, A2)
         self.cz(D4, A2)
-        self.minus_pi_half_y(A2)
+        self.pi_half_y(A2)
         self.measure_z(A2)
 
-        self.minus_pi_half_y(D1)
-        self.minus_pi_half_y(D2)
-        self.minus_pi_half_y(D3)
-        self.minus_pi_half_y(D4)
+        if A2_basis == 'X':
+            self.minus_pi_half_y(D1)
+            self.minus_pi_half_y(D2)
+            self.minus_pi_half_y(D3)
+            self.minus_pi_half_y(D4)
 
         self.minus_pi_half_y(A1)
         self.minus_pi_half_y(A3)
@@ -129,3 +115,12 @@ class TransmonBuilder:
         self.pi_half_y(A3)
         self.measure_z(A1)
         self.measure_z(A3)
+
+        if is_first_round:
+            self.circuit.append("DETECTOR", [stim.target_rec(-2)])
+            self.circuit.append("DETECTOR", [stim.target_rec(-3)])
+            self.circuit.append("DETECTOR", [stim.target_rec(-1)])
+        else:
+            self.circuit.append("DETECTOR", [stim.target_rec(-2), stim.target_rec(-5)])
+            self.circuit.append("DETECTOR", [stim.target_rec(-3), stim.target_rec(-6)])
+            self.circuit.append("DETECTOR", [stim.target_rec(-1), stim.target_rec(-4)])
