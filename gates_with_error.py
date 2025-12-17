@@ -7,6 +7,16 @@ A1, A2, A3 = 4, 5, 6
 # 그룹화 (나중에 반복문 돌리기 편하게)
 DATA_QUBITS = [D1, D2, D3, D4]
 ANCILLA_QUBITS = [A1, A2, A3]
+QUBITS_NAME = {D1: 'D1',
+               D2: 'D2',
+               D3: 'D3',
+               D4: 'D4',
+               A1: 'A1',
+               A2: 'A2',
+               A3: 'A3'}
+ANCILLA_INDEX = {A1: 1,
+                A2: 0,
+                A3: 2}  # measure 되는 순서
 ALL_QUBITS = DATA_QUBITS + ANCILLA_QUBITS
 
 # ==========================================
@@ -14,7 +24,7 @@ ALL_QUBITS = DATA_QUBITS + ANCILLA_QUBITS
 # ==========================================
 
 class TransmonBuilder:
-    def __init__(self, p_1q, p_2q, p_meas, p_1q_z=0, squence_time = 2, T1 = 10, T2 = 15):
+    def __init__(self, p_1q, p_2q, p_meas, p_1q_z=0, squence_time = 2, T1 = 10, T2 = 10):
         self.circuit = stim.Circuit()
         self.p_1q = p_1q      
         self.p_2q = p_2q           

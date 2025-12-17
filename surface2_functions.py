@@ -158,14 +158,13 @@ def plot_figure5(
                 shots=1000000, 
                 rounds=10,
                  **kwarg):
-    results , det_results = figure5_experiment(p_1q, p_2q, p_meas, shots, rounds, **kwarg)
-    plot_figure5_ab(results, det_results)
-    # plot_figure5_c(results, det_results)
-    # plot_figure5_d(results, det_results)
+    det_results = figure5_experiment(p_1q, p_2q, p_meas, shots, rounds, **kwarg)
+    plot_figure5_ab(det_results)
+    plot_figure5_c(det_results)
+    plot_figure5_d(det_results)
     return
 
 def figure5_experiment(p_1q, p_2q, p_meas, shots, rounds, **kwarg):
-    results = {}
     det_results = {}
 
     state_labels = ['0', '1', '+', '-']
@@ -180,45 +179,62 @@ def figure5_experiment(p_1q, p_2q, p_meas, shots, rounds, **kwarg):
 
         # 2. 샘플링
         circuit = builder.get_circuit()
-        raw_result = circuit.compile_detector_sampler(seed=SEED).sample(shots=shots)
-        A_result = circuit.compile_sampler(seed=SEED).sample(shots=shots)
+        raw_result = circuit.compile_detector_sampler().sample(shots=shots)
 
-        results[state] = raw_result
-        det_results[state] = A_result
+        det_results[state] = raw_result
 
-    return results, det_results
+    return det_results
 
-def plot_figure5_ab(results, det_results):
-    
+def plot_figure5_ab(det_results):
     fig, axes = plt.subplots(2, 2, figsize=(15, 12))
 
     state_labels = ['0', '1', '+', '-']
-    
-    ancilla_names = ['A1 (2-body)', 'A2 (4-body)', 'A3 (2-body)']
-    ancilla_index = [1, 0, 2]  # A1, A2, A3 순서대로 인덱스
     colors = ['tab:green', 'tab:red', 'tab:blue'] # A1:초록, A2:빨강, A3:파랑
     markers = ['s', 'o', '^']
 
     for idx, state in enumerate(state_labels):
-        raw_result = results[state]
         det_result = det_results[state]
         
         num_ancillas =  len(ANCILLA_QUBITS)
-        num_rounds = raw_result.shape[1] // num_ancillas + 1 # +1 for state prep round
-        shots = raw_result.shape[0]
+        num_rounds = det_result.shape[1] // num_ancillas # +1 for state prep round
+        shots = det_result.shape[0]
 
-        reshaped_result = raw_result.reshape(shots, -1, num_ancillas)
-        det_reshaped_result = det_result.reshape(shots, -1, num_ancillas)
+        det_reshaped_result = det_result.reshape(shots, -1, num_ancillas)               #reshaped detection result
+        reconstructed_result = np.logical_xor.accumulate(det_reshaped_result, axis=1)   #reshaped measurement result 샷 마다 round마다 stabilizer measurement 결과 (0, 1)
+
+        prep_mask = ~np.any(reconstructed_result[:, 0, :], axis=1) #prep된 애들의 마스크
+        print(f"State |{state}⟩: {np.sum(prep_mask)}/{shots} clean shots ({np.sum(prep_mask)/shots*100:.1f}%)")
         
+        preped_result = reconstructed_result[prep_mask] #prep된 애들의 measurement result
+        preped_det_result = det_reshaped_result[prep_mask]  #prep된 애들의 detection result
+        preped_shots = preped_result.shape[0]               #prep된 애들의 샷 수
 
+        preped_measurement_prob = np.sum(preped_result, axis=0) / preped_shots #prep된 애들의 measurement 기댓값 (0 또는 1)
+        preped_operator_prob = 1 - 2*preped_measurement_prob #prep 된 애들 stabilizer operator의 기댓값
 
-    #     reshaped_result = raw_result.reshape(shots, -1, len(ANCILLA_QUBITS))
-    #     A_reshaped_result = raw_result.reshape(shots, -1, len(ANCILLA_QUBITS))
+        preped_det_result_prob = np.sum(preped_det_result, axis=0) / preped_shots #prep 된 애들 detection result 기댓값
 
-    #     actual_rounds = reshaped_result.shape[1]
-    #     num_ancillas = reshaped_result.shape[2]
+        # Plotting
+        ax = axes.flat[idx]
+        
+        for i in range(num_ancillas): 
+            ax.plot(range(num_rounds), preped_operator_prob[:, ANCILLA_INDEX[ANCILLA_QUBITS[i]]], 
+                    label=f"Ancilla {QUBITS_NAME[ANCILLA_QUBITS[i]]}", 
+                    color=colors[i], 
+                    marker=markers[i], 
+                    markersize=5, 
+                    alpha=0.8)
+        ax.set_title(f"State Preparation({preped_shots}/{shots} = {preped_shots/shots*100:.1f}% clean shots): |{state}⟩$_L$")
+        ax.set_xlabel("Syndrome Extraction Round")
+        ax.set_ylabel("operator expectation value")
+        ax.set_ylim(-1, 1)
+        ax.set_xticks(range(num_rounds))
+        ax.set_yticks(np.arange(-1, 1, 0.25))
+        ax.grid(True, which='both', linestyle='--', alpha=0.5)
 
-    #     print(np.bitwise_xor.accumulate(reshaped_result, axis=1) == A_reshaped_result)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
 
     #     #prep 성공한 애들
     #     prep_round = reshaped_result[:, 0, :]
@@ -327,3 +343,150 @@ def plot_figure5_ab(results, det_results):
 
 
 # %%
+def plot_figure5_c(det_results):
+    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+
+    state_labels = ['0', '1', '+', '-']
+    colors = ['tab:green', 'tab:red', 'tab:blue'] # A1:초록, A2:빨강, A3:파랑
+    markers = ['s', 'o', '^']
+
+    for idx, state in enumerate(state_labels):
+        det_result = det_results[state]
+        
+        num_ancillas =  len(ANCILLA_QUBITS)
+        num_rounds = det_result.shape[1] // num_ancillas # +1 for state prep round
+        shots = det_result.shape[0]
+
+        det_reshaped_result = det_result.reshape(shots, -1, num_ancillas)               #reshaped detection result
+        reconstructed_result = np.logical_xor.accumulate(det_reshaped_result, axis=1)   #reshaped measurement result 샷 마다 round마다 stabilizer measurement 결과 (0, 1)
+
+        prep_mask = ~np.any(reconstructed_result[:, 0, :], axis=1) #prep된 애들의 마스크
+        print(f"State |{state}⟩: {np.sum(prep_mask)}/{shots} clean shots ({np.sum(prep_mask)/shots*100:.1f}%)")
+        
+        preped_result = reconstructed_result[prep_mask] #prep된 애들의 measurement result
+        preped_det_result = det_reshaped_result[prep_mask]  #prep된 애들의 detection result
+        preped_shots = preped_result.shape[0]               #prep된 애들의 샷 수
+
+        preped_measurement_prob = np.sum(preped_result, axis=0) / preped_shots #prep된 애들의 measurement 기댓값 (0 또는 1)
+        preped_operator_prob = 1 - 2*preped_measurement_prob #prep 된 애들 stabilizer operator의 기댓값
+
+        preped_det_result_prob = np.sum(preped_det_result, axis=0) / preped_shots #prep 된 애들 detection result 기댓값
+        
+        
+        no_error_mask = ~np.any(det_reshaped_result, axis = 2) # 에러 없는 샷 마스크
+        no_error_mask_accumulated = np.logical_and.accumulate(no_error_mask, axis=1)
+        success_prob = np.sum(no_error_mask_accumulated, axis=0) / shots
+
+        # plot
+        ax = axes.flat[idx]
+        ax.plot(range(num_rounds), success_prob, color='purple', marker='o',
+                markersize=5, alpha=0.8)
+        ax.set_yscale('log')
+        ax.set_title(f"Success Probability : |{state}⟩$_L$")
+        ax.set_xlabel("Syndrome Extraction Round")
+        ax.set_ylabel("Success Probability")
+        ax.set_xticks(range(num_rounds))
+        ax.set_yticks([1e-3, 1e-2, 1e-1, 1])
+
+
+    plt.show()
+
+#%%
+def plot_figure5_d(det_results):
+    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+
+    state_labels = ['0', '1', '+', '-']
+    colors = ['tab:green', 'tab:red', 'tab:blue', 'tab:orange'] # 0,1,2,3 errors
+    markers = ['s', 'o', '^', 'D']
+
+    for idx, state in enumerate(state_labels):
+        det_result = det_results[state]
+        
+        num_ancillas =  len(ANCILLA_QUBITS)
+        num_rounds = det_result.shape[1] // num_ancillas # +1 for state prep round
+        shots = det_result.shape[0]
+
+        det_reshaped_result = det_result.reshape(shots, -1, num_ancillas)               #reshaped detection result
+        reconstructed_result = np.logical_xor.accumulate(det_reshaped_result, axis=1)   #reshaped measurement result 샷 마다 round마다 stabilizer measurement 결과 (0, 1)
+
+        prep_mask = ~np.any(reconstructed_result[:, 0, :], axis=1) #prep된 애들의 마스크
+        print(f"State |{state}⟩: {np.sum(prep_mask)}/{shots} clean shots ({np.sum(prep_mask)/shots*100:.1f}%)")
+        
+        preped_result = reconstructed_result[prep_mask] #prep된 애들의 measurement result
+        preped_det_result = det_reshaped_result[prep_mask]  #prep된 애들의 detection result
+        preped_shots = preped_result.shape[0]               #prep된 애들의 샷 수
+
+        preped_measurement_prob = np.sum(preped_result, axis=0) / preped_shots #prep된 애들의 measurement 기댓값 (0 또는 1)
+        preped_operator_prob = 1 - 2*preped_measurement_prob #prep 된 애들 stabilizer operator의 기댓값
+
+        preped_det_result_prob = np.sum(preped_det_result, axis=0) / preped_shots #prep 된 애들 detection result 기댓값
+        
+        
+        no_error_mask = ~np.any(det_reshaped_result, axis = 2) # 에러 없는 샷 마스크
+        no_error_mask_accumulated = np.logical_and.accumulate(no_error_mask, axis=1)
+
+        Data = []
+        for r in range(1, num_rounds):
+            survivors_mask = no_error_mask_accumulated[:, r-1]
+            num_survivors = np.sum(survivors_mask)
+
+            if num_survivors == 0:
+                print(f"Round {r}: 생존자가 없습니다.")
+                continue    
+
+            data = []
+            for i in range(num_ancillas):
+                # 이번 라운드 안실라 i의 결과 (True=Error)
+                current_error = det_reshaped_result[:, r, ANCILLA_INDEX[ANCILLA_QUBITS[i]]]
+                
+                # 조건: (살아남음) AND (이번에 에러)
+                new_errors = current_error & survivors_mask
+                
+                data.append(new_errors)
+            
+            summed_data = np.sum(data, axis = 0)
+            values, counts = np.unique(summed_data, return_counts=True)
+            a = np.zeros(4)
+            for idx_e, value in enumerate(values):
+                if value != 0:
+                    a[value] = counts[idx_e]/num_survivors
+            a[0] = 1 - np.sum(a)
+            Data.append(a)
+        Data = np.array(Data) # shape: (rounds-1, 4)
+
+        ax = axes.flat[idx]
+        for key in range(4):
+            y_data = Data[:, key]
+            ax.plot(range(1, num_rounds), y_data,
+                    marker=markers[key], 
+                    linestyle='-', 
+                    color=colors[key % len(colors)], 
+                    label=f"{key} Errors", 
+                    alpha=0.8)
+        ax.set_title(f"Multiple Error Probability : |{state}⟩$_L$")
+        ax.set_xlabel("Syndrome Extraction Round")
+        ax.set_ylabel("Probability")
+        ax.grid(True, linestyle='--', alpha=0.5)
+    plt.legend()
+    plt.show()
+
+    #     data = np.array(data) # shape: (rounds-1, num_ancillas)
+
+    #     # plot
+    #     ax = axes.flat[idx]
+    #     for i in range(num_ancillas):
+    #         ax.plot(range(1, num_rounds), data[:, i],
+    #                 marker=markers[i], 
+    #                 linestyle='-', 
+    #                 color=colors[i], 
+    #                 label=f"Ancilla {QUBITS_NAME[ANCILLA_QUBITS[i]]}", 
+    #                 alpha=0.8)
+            
+    #     ax.set_title(f"Conditional Error Rate : |{state}⟩$_L$")
+    #     ax.set_xlabel("Syndrome Extraction Round")
+    #     ax.set_ylabel("P(Error at r | No Error < r)")
+    #     ax.grid(True, linestyle='--', alpha=0.5)
+    # plt.legend()
+    # plt.show()
+
+    return
