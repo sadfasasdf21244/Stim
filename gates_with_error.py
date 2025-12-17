@@ -1,5 +1,5 @@
 import stim
-
+import numpy as np
 # 큐비트 인덱스 정의 (사용하기 편하게 전역 변수로 설정)
 D1, D2, D3, D4 = 0, 1, 2, 3
 A1, A2, A3 = 4, 5, 6
@@ -14,12 +14,18 @@ ALL_QUBITS = DATA_QUBITS + ANCILLA_QUBITS
 # ==========================================
 
 class TransmonBuilder:
-    def __init__(self, p_1q, p_2q, p_meas, p_1q_z=0):
+    def __init__(self, p_1q, p_2q, p_meas, p_1q_z=0, squence_time = 2, T1 = 10, T2 = 15):
         self.circuit = stim.Circuit()
         self.p_1q = p_1q      
         self.p_2q = p_2q           
         self.p_meas = p_meas   
-        self.p_1q_z = p_1q_z      
+        self.p_1q_z = p_1q_z
+        self.squence_time = squence_time
+        self.T1 = T1
+        self.T2 = T2
+        self.T1_error_rate = 1 - np.exp(- self.squence_time / self.T1)
+        self.T2_error_rate = 1 - np.exp( self.squence_time / self.T2)
+
 
     def _add_noise_1q(self, target):
         if self.p_1q > 0:
@@ -32,6 +38,14 @@ class TransmonBuilder:
     def _add_noise_2q(self, t1, t2):
         if self.p_2q > 0:
             self.circuit.append("DEPOLARIZE2", [t1, t2], self.p_2q)
+    
+    # def _add_T1_noise(self, target):
+    #     if self.T1_error_rate > 0:
+    #         self.circuit.append("AMPLITUDE_DAMPING", [target], self.T1_error_rate)
+
+    def _add_T2_noise(self, target):    
+        if self.T2_error_rate > 0:
+            self.circuit.append("DEPOLARIZE1", [target], self.T2_error_rate)
 
     # 1. Pi Rotations
     def pi_x(self, target):
@@ -117,10 +131,14 @@ class TransmonBuilder:
         self.measure_z(A3)
 
         if is_first_round:
-            self.circuit.append("DETECTOR", [stim.target_rec(-2)])
             self.circuit.append("DETECTOR", [stim.target_rec(-3)])
+            self.circuit.append("DETECTOR", [stim.target_rec(-2)])
             self.circuit.append("DETECTOR", [stim.target_rec(-1)])
         else:
-            self.circuit.append("DETECTOR", [stim.target_rec(-2), stim.target_rec(-5)])
             self.circuit.append("DETECTOR", [stim.target_rec(-3), stim.target_rec(-6)])
+            self.circuit.append("DETECTOR", [stim.target_rec(-2), stim.target_rec(-5)])
             self.circuit.append("DETECTOR", [stim.target_rec(-1), stim.target_rec(-4)])
+
+        for qubit in ALL_QUBITS:
+            # self._add_T1_noise([qubit])
+            self._add_T2_noise([qubit])
