@@ -15,13 +15,13 @@ def state_prep(target_state,
         p_1q,
         p_2q,   
         p_meas,
-        **kwarg
+        **kwargs
         ):
-    builder = TransmonBuilder(
+    builder = CircuitBuilder(
         p_1q=p_1q,   
         p_2q=p_2q,  
         p_meas=p_meas, 
-        **kwarg 
+        **kwargs
     )
 
     if target_state == '0':
@@ -40,14 +40,14 @@ def state_prep(target_state,
         builder.minus_pi_half_y(D4)
 
     # state preparation
-    builder.measure_all(True)
+    builder.measure_ancilla(True)
 
     return builder
 
 #%%
 
 # state preparation 테스트
-def state_prep_test(p_1q, p_2q, p_meas, **kwarg):
+def state_prep_test(p_1q, p_2q, p_meas, shots, **kwarg):
     for states in ['0', '1', '+', '-']:
         print(f"=== 상태 준비: |{states}⟩ ===")
         builder = state_prep(states,
@@ -56,7 +56,6 @@ def state_prep_test(p_1q, p_2q, p_meas, **kwarg):
                             p_meas,   # 3.0%
                             **kwarg
                             )
-        shots = 10000
         det_sampler = builder.get_circuit().compile_detector_sampler(seed=SEED)
         result = det_sampler.sample(shots=shots)
 
@@ -83,7 +82,7 @@ def Figure3_experiment(target_qubits,
 
     for label in input_labels:
         # 1. 빌더 생성
-        builder = TransmonBuilder(
+        builder = CircuitBuilder(
             p_1q=p_1q,    
             p_2q=p_2q,    
             p_meas=p_meas, 
@@ -96,7 +95,7 @@ def Figure3_experiment(target_qubits,
                 builder.pi_y(target_qubits[i])
         
         # 3. 측정 수행 (First round 모드 -> Active Reset 없이 측정만 수행)
-        builder.measure_all(is_first_round=True, A2_basis = 'Z')
+        builder.measure_ancilla(is_first_round=True, A2_basis = 'Z')
         
         # 4. 샘플링
         sampler = builder.get_circuit().compile_sampler(seed=SEED)
@@ -155,17 +154,17 @@ def plot_figure5(
                 p_1q=0.005, 
                 p_2q=0.02, 
                 p_meas=0.03, 
-                shots=1000000, 
+                shots=10000000, 
                 rounds=10,
                  **kwarg):
     det_results = figure5_experiment(p_1q, p_2q, p_meas, shots, rounds, **kwarg)
-    plot_figure5_ab(det_results)
-    plot_figure5_c(det_results)
-    plot_figure5_d(det_results)
+    plot_figure5_ab(p_1q, p_2q, p_meas, shots, rounds, **kwarg)
+    plot_figure5_c(det_results, shots)
+    plot_figure5_d(det_results, shots)
     return
 
 def figure5_experiment(p_1q, p_2q, p_meas, shots, rounds, **kwarg):
-    det_results = {}
+    state_builders = {}
 
     state_labels = ['0', '1', '+', '-']
 
@@ -175,175 +174,229 @@ def figure5_experiment(p_1q, p_2q, p_meas, shots, rounds, **kwarg):
 
         # 추가 라운드 반복
         for r in range(rounds):
-            builder.measure_all()
+            builder.measure_ancilla()
 
-        # 2. 샘플링
-        circuit = builder.get_circuit()
-        raw_result = circuit.compile_detector_sampler().sample(shots=shots)
+        state_builders[state] = builder
 
-        det_results[state] = raw_result
+    return state_builders
 
-    return det_results
-
-def plot_figure5_ab(det_results):
-    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-
-    state_labels = ['0', '1', '+', '-']
-    colors = ['tab:green', 'tab:red', 'tab:blue'] # A1:초록, A2:빨강, A3:파랑
-    markers = ['s', 'o', '^']
-
-    for idx, state in enumerate(state_labels):
-        det_result = det_results[state]
+def plot_figure5_ab(p_1q, p_2q, p_meas, shots, max_rounds, **kwarg):
+    # 결과를 저장할 딕셔너리
+    # 구조: Data[round][state] = expectation_value
+    Data = {}
+    
+    # 1라운드부터 max_rounds까지 반복
+    for r in range(0, max_rounds + 1):
+        print(f"\n--- Processing Round {r} ---")
         
-        num_ancillas =  len(ANCILLA_QUBITS)
-        num_rounds = det_result.shape[1] // num_ancillas # +1 for state prep round
-        shots = det_result.shape[0]
-
-        det_reshaped_result = det_result.reshape(shots, -1, num_ancillas)               #reshaped detection result
-        reconstructed_result = np.logical_xor.accumulate(det_reshaped_result, axis=1)   #reshaped measurement result 샷 마다 round마다 stabilizer measurement 결과 (0, 1)
-
-        prep_mask = ~np.any(reconstructed_result[:, 0, :], axis=1) #prep된 애들의 마스크
-        print(f"State |{state}⟩: {np.sum(prep_mask)}/{shots} clean shots ({np.sum(prep_mask)/shots*100:.1f}%)")
+        # 해당 라운드 수만큼 회로 생성 (0, 1, +, - 네 가지 상태에 대해)
+        state_builders = figure5_experiment(p_1q, p_2q, p_meas, shots, r, **kwarg)
         
-        preped_result = reconstructed_result[prep_mask] #prep된 애들의 measurement result
-        preped_det_result = det_reshaped_result[prep_mask]  #prep된 애들의 detection result
-        preped_shots = preped_result.shape[0]               #prep된 애들의 샷 수
+        data_per_round = {}
+        state_labels = ['0', '1', '+', '-']
 
-        preped_measurement_prob = np.sum(preped_result, axis=0) / preped_shots #prep된 애들의 measurement 기댓값 (0 또는 1)
-        preped_operator_prob = 1 - 2*preped_measurement_prob #prep 된 애들 stabilizer operator의 기댓값
+        for state in state_labels:
+            builder = state_builders[state]
+            
+            # [수정 1] 논리 연산자 정의 (Topology에 맞게 수정 필수!)
+            # Distance-2 Surface Code 표준 가정:
+            # Z_L = Z1 * Z3 (Vertical)
+            # X_L = X1 * X2 (Horizontal)
+            if state in ['0', '1']:
+                # Z Basis 측정 (D1, D3)
+                builder.measure_arbitrary([D1, D2], 'Z')
+            else:
+                # X Basis 측정 (D1, D2) -> 회로상에서 Basis Change 후 Z측정
+                builder.measure_arbitrary([D1, D3], 'X')
 
-        preped_det_result_prob = np.sum(preped_det_result, axis=0) / preped_shots #prep 된 애들 detection result 기댓값
+            # 회로 컴파일 및 실행
+            circuit = builder.get_circuit()
+            sampler = circuit.compile_sampler()
+            
+            # 결과: [Shots, (N_ancilla_rounds * 3) + 2_data]
+            raw_result = sampler.sample(shots=shots)
+            print(f"raw_results shape = {np.shape(raw_result)}")
+            # -----------------------------------------------------------
+            # [수정 2] 데이터 분리 및 Detector 계산
+            # -----------------------------------------------------------
+            # 마지막 2개 비트는 데이터 큐비트 측정 결과
+            data_meas = raw_result[:, -2:] 
+            
+            # 나머지는 안실라 측정 결과
+            ancilla_meas = raw_result[:, :-2]
+            print(f"ancilla_meas shape = {np.shape(ancilla_meas)}")
+            # 안실라 결과 Reshape: (Shots, Rounds+1, 3)
+            # Rounds+1인 이유: state_prep(R0) + r번의 추가 라운드
+            num_ancillas = len(ANCILLA_QUBITS)
+            reshaped_ancilla = ancilla_meas.reshape(shots, -1, num_ancillas)
+            print(f"reshaped_ancilla shape = {np.shape(reshaped_ancilla)}")
+            # --- Post-selection Logic (핵심) ---
+            # 1. Round 0 (Prep): 값이 0이어야 함 (에러 없음)
+            # 2. Round N > 0: 이전 라운드와 값이 같아야 함 (M_t XOR M_{t-1} == 0)
+            
+            # (1) Preparation Error Check (Round 0)
+            prep_errors = np.any(reshaped_ancilla[:, 0, :], axis=1)
+            
+            # (2) Mid-circuit Error Check (Detection Events)
+            # 시간 축(axis 1)을 따라 인접한 값끼리 XOR (Diff)
+            # detectors shape: (Shots, Rounds, 3)
+            detectors = np.logical_xor(reshaped_ancilla[:, 1:, :], reshaped_ancilla[:, :-1, :])
+            
+            
+            # 전체 라운드 중 하나라도 1(변화/에러)이 있으면 True
+            mid_errors = np.any(detectors, axis=(1, 2))
+            
+            # 최종 마스크: Prep 에러도 없고, 중간 에러도 없어야 함
+            valid_mask = ~(prep_errors | mid_errors)
+            
+            # -----------------------------------------------------------
+            # 기댓값 계산
+            # -----------------------------------------------------------
+            num_valid = np.sum(valid_mask)
+            
+            if num_valid > 0:
+                # 살아남은 샷들의 데이터 큐비트 결과 가져오기
+                valid_data = data_meas[valid_mask]
+                
+                # Parity 계산: (1 - 2*D_a) * (1 - 2*D_b)
+                # 0 -> +1, 1 -> -1 로 변환하여 곱함
+                # Z_L = Z_a * Z_b
+                parity = (1 - 2 * valid_data[:, 0]) * (1 - 2 * valid_data[:, 1])
+                
+                # 평균 (Expectation Value)
+                expectation_val = np.mean(parity)
+            else:
+                print(f"Warning: State |{state}⟩ has 0 valid shots!")
+                expectation_val = 0.0
 
-        # Plotting
-        ax = axes.flat[idx]
+            print(f"  State |{state}⟩: {num_valid}/{shots} ({num_valid/shots*100:.1f}%) kept. <O_L> = {expectation_val:.3f}")
+            
+            data_per_round[state] = expectation_val
+
+        Data[r] = data_per_round
         
-        for i in range(num_ancillas): 
-            ax.plot(range(num_rounds), preped_operator_prob[:, ANCILLA_INDEX[ANCILLA_QUBITS[i]]], 
-                    label=f"Ancilla {QUBITS_NAME[ANCILLA_QUBITS[i]]}", 
-                    color=colors[i], 
-                    marker=markers[i], 
-                    markersize=5, 
-                    alpha=0.8)
-        ax.set_title(f"State Preparation({preped_shots}/{shots} = {preped_shots/shots*100:.1f}% clean shots): |{state}⟩$_L$")
-        ax.set_xlabel("Syndrome Extraction Round")
-        ax.set_ylabel("operator expectation value")
-        ax.set_ylim(-1, 1)
-        ax.set_xticks(range(num_rounds))
-        ax.set_yticks(np.arange(-1, 1, 0.25))
-        ax.grid(True, which='both', linestyle='--', alpha=0.5)
+    # 데이터 수집이 끝났으면 그래프 그리기
+    plot_memory_experiment(Data)
+    
+    return Data
 
-    plt.legend()
+def plot_memory_experiment(data):
+    """
+    data 구조: data[round][state] = expectation_value
+    round: 1 ~ 10
+    state: '0', '1', '+', '-'
+    """
+    
+    # 1. 데이터 추출 (Parsing)
+    # 라운드 키를 정렬 (1, 2, ..., 10)
+    rounds = sorted(data.keys())
+    
+    # 각 상태별로 리스트 생성
+    y_0 = [data[r]['0'] for r in rounds]
+    y_1 = [data[r]['1'] for r in rounds]
+    y_plus = [data[r]['+'] for r in rounds]
+    y_minus = [data[r]['-'] for r in rounds]
+
+    # 2. 그래프 설정 (2개의 서브플롯 생성)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+    # ==========================================================
+    # Figure 5 (a): Z-basis Memory (|0>, |1>)
+    # Y축: <Z_L>
+    # ==========================================================
+    # |0> 상태 (Expected +1)
+    ax1.plot(rounds, y_0, 'o-', color='blue', label=r'State $|0\rangle_L$', markersize=8)
+    # |1> 상태 (Expected -1)
+    ax1.plot(rounds, y_1, 's-', color='red', label=r'State $|1\rangle_L$', markersize=8)
+
+    ax1.set_title("(a) Z-basis Memory", fontsize=16)
+    ax1.set_xlabel("Number of rounds", fontsize=14)
+    ax1.set_ylabel(r"Logical Expectation $\langle Z_L \rangle$", fontsize=14)
+    ax1.set_ylim(-1.1, 1.1)  # 기댓값은 -1 ~ 1 사이
+    ax1.axhline(0, color='gray', linestyle='--', linewidth=0.8) # 0 기준선
+    ax1.grid(True, linestyle=':', alpha=0.6)
+    ax1.legend(fontsize=12)
+
+    # ==========================================================
+    # Figure 5 (b): X-basis Memory (|+>, |->)
+    # Y축: <X_L>
+    # ==========================================================
+    # |+> 상태 (Expected +1)
+    ax2.plot(rounds, y_plus, '^-', color='green', label=r'State $|+\rangle_L$', markersize=8)
+    # |-> 상태 (Expected -1)
+    ax2.plot(rounds, y_minus, 'd-', color='purple', label=r'State $|-\rangle_L$', markersize=8)
+
+    ax2.set_title("(b) X-basis Memory", fontsize=16)
+    ax2.set_xlabel("Number of rounds", fontsize=14)
+    ax2.set_ylabel(r"Logical Expectation $\langle X_L \rangle$", fontsize=14)
+    ax2.set_ylim(-1.1, 1.1)
+    ax2.axhline(0, color='gray', linestyle='--', linewidth=0.8)
+    ax2.grid(True, linestyle=':', alpha=0.6)
+    ax2.legend(fontsize=12)
+
     plt.tight_layout()
     plt.show()
 
-    #     #prep 성공한 애들
-    #     prep_round = reshaped_result[:, 0, :]
-    #     prep_success_mask = ~np.any(prep_round, axis=1)
-    #     prep_valid_shots = reshaped_result[prep_success_mask]
-    #     num_valid = len(prep_valid_shots)
+
+
+# def plot_figure5_ab_잘못됨(state_builders):
+#     fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+
+#     state_labels = ['0', '1', '+', '-']
+#     colors = ['tab:green', 'tab:red', 'tab:blue'] # A1:초록, A2:빨강, A3:파랑
+#     markers = ['s', 'o', '^']
+
+#     for idx, state in enumerate(state_labels):
+#         # 2. 샘플링
+#         circuit = state_builders[state].get_circuit()
+#         det_result = circuit.compile_detector_sampler().sample(shots=shots)
         
-    #     #처음부터 에러 없는 애들
-    #     no_error_mask = ~np.any(reshaped_result, axis=2)
-    #     no_error_mask_accumulated = np.logical_and.accumulate(no_error_mask, axis=1)
-    #     success_prob = np.sum(no_error_mask_accumulated, axis=0) / shots
+#         num_ancillas =  len(ANCILLA_QUBITS)
+#         num_rounds = det_result.shape[1] // num_ancillas # +1 for state prep round
+#         shots = det_result.shape[0]
 
-    #     #에러 없고 그 다음에도 에러 확률
-    #     cond_probs = {0: [], 1: [], 2: []} # 안실라 인덱스별 리스트
+#         det_reshaped_result = det_result.reshape(shots, -1, num_ancillas)               #reshaped detection result
+#         reconstructed_result = np.logical_xor.accumulate(det_reshaped_result, axis=1)   #reshaped measurement result 샷 마다 round마다 stabilizer measurement 결과 (0, 1)
 
-    #     for r in range(1, actual_rounds):
-    #         survivors_mask = no_error_mask_accumulated[:, r-1]
-    #         num_survivors = np.sum(survivors_mask)
-    #         if num_survivors == 0:
-    #             print(f"Round {r}: 생존자가 없습니다.")
-    #             for i in range(num_ancillas):
-    #                 cond_probs[i].append(0.0)
-    #             continue    
-
-    #         for i in range(num_ancillas):
-    #             # 이번 라운드 안실라 i의 결과 (True=Error)
-    #             current_error = reshaped_result[:, r, i]
-                
-    #             # 조건: (살아남음) AND (이번에 에러)
-    #             new_errors = current_error & survivors_mask
-    #             num_new_errors = np.sum(new_errors)
-                
-    #             # 확률 계산
-    #             prob = num_new_errors / num_survivors
-    #             cond_probs[i].append(prob)
-
-
-    #     ax_parity_prob = axes[idx, 0]   
-    #     ax_success_prob = axes[idx, 1]
-    #     ax_syndrome_prob = axes[idx, 2]
-
-    #     # 성공 확률 계산
-    #     ax_success_prob.plot(success_prob)
-    #     ax_success_prob.set_title(f"Success Probability per Round for |{state}⟩")
-    #     ax_success_prob.set_xlabel("Syndrome Extraction Round")
-    #     ax_success_prob.set_ylabel("Success Probability")
-    #     ax_success_prob.set_yscale('log')
-
-    #     # 5. 평균 에러율 계산
-    #     if num_valid > 0:
-    #         avg_errors = np.mean(prep_valid_shots, axis=0)
-    #     else:
-    #         avg_errors = np.zeros((actual_rounds, num_ancillas))
-    #         print(f"Warning: State |{state}⟩ has 0 valid shots!")
-
-    #     print(f"State |{state}⟩: {num_valid}/{shots} clean shots ({num_valid/shots*100:.1f}%)")
-
-    #     # 6. Plotting
-    #     x_axis = np.arange(actual_rounds)
+#         prep_mask = ~np.any(reconstructed_result[:, 0, :], axis=1) #prep된 애들의 마스크
+#         print(f"State |{state}⟩: {np.sum(prep_mask)}/{shots} clean shots ({np.sum(prep_mask)/shots*100:.1f}%)")
         
-    #     for i in range(num_ancillas): 
-    #         ax_parity_prob.plot(x_axis, avg_errors[:, i], 
-    #                 label=ancilla_names[i], 
-    #                 color=colors[i], 
-    #                 marker=markers[i], 
-    #                 markersize=5, 
-    #                 alpha=0.8)
+#         preped_result = reconstructed_result[prep_mask] #prep된 애들의 measurement result
+#         preped_det_result = det_reshaped_result[prep_mask]  #prep된 애들의 detection result
+#         preped_shots = preped_result.shape[0]               #prep된 애들의 샷 수
 
-    #     ax_parity_prob.set_title(f"State Preparation({num_valid}/{shots} = {num_valid/shots*100:.1f}% clean shots): |{state}⟩$_L$")
-    #     ax_parity_prob.set_xlabel("Syndrome Extraction Round")
-    #     ax_parity_prob.set_ylabel("Detection Event Probability")
-    #     ax_parity_prob.set_ylim(0, np.max(avg_errors) * 1.3 + 0.01)
-    #     ax_parity_prob.set_xticks(x_axis)
-    #     ax_parity_prob.grid(True, which='both', linestyle='--', alpha=0.5)
+#         preped_measurement_prob = np.sum(preped_result, axis=0) / preped_shots #prep된 애들의 measurement 기댓값 (0 또는 1)
+#         preped_operator_prob = 1 - 2*preped_measurement_prob #prep 된 애들 stabilizer operator의 기댓값
+
+#         preped_det_result_prob = np.sum(preped_det_result, axis=0) / preped_shots #prep 된 애들 detection result 기댓값
+#         preped_det_operator_prob = 1-2*preped_det_result_prob
+
+#         # Plotting
+#         ax = axes.flat[idx]
         
-    #     # Round 0 (필터링 기준) 표시
-    #     ax_parity_prob.axvline(x=0, color='gray', linestyle=':', alpha=0.5)
+#         for i in range(num_ancillas): 
+#             ax.plot(range(num_rounds), preped_operator_prob[:, ANCILLA_INDEX[ANCILLA_QUBITS[i]]], 
+#                     label=f"Ancilla {QUBITS_NAME[ANCILLA_QUBITS[i]]}", 
+#                     color=colors[i], 
+#                     marker=markers[i], 
+#                     markersize=5, 
+#                     alpha=0.8)
+#         ax.set_title(f"State Preparation({preped_shots}/{shots} = {preped_shots/shots*100:.1f}% clean shots): |{state}⟩$_L$")
+#         ax.set_xlabel("Syndrome Extraction Round")
+#         ax.set_ylabel("operator expectation value")
+#         ax.set_ylim(-1, 1)
+#         ax.set_xticks(range(num_rounds))
+#         ax.set_yticks(np.arange(-1, 1, 0.25))
+#         ax.grid(True, which='both', linestyle='--', alpha=0.5)
 
-    #     if idx == 0:
-    #         ax_parity_prob.legend()
+#     plt.legend()
+#     plt.tight_layout()
+#     plt.show()
 
-    #     rounds_x_cond = range(1, actual_rounds)
-
-    #     for i in range(num_ancillas):
-    #         ax_syndrome_prob.plot(rounds_x_cond, cond_probs[i], 
-    #                               marker=markers[i], 
-    #                               linestyle='-', 
-    #                               color=colors[i], 
-    #                               label=ancilla_names[i], 
-    #                               alpha=0.8)
-
-    #     # 4. 스타일링
-    #     ax_syndrome_prob.set_title(f"Conditional Error Rate |{state}⟩")
-    #     ax_syndrome_prob.set_xlabel("Syndrome Extraction Round")
-    #     ax_syndrome_prob.set_ylabel("P(Error at r | No Error < r)")
-        
-    #     # Y축 범위: 데이터에 따라 유동적으로, 혹은 0~0.1 정도로 고정
-    #     ax_syndrome_prob.grid(True, linestyle='--', alpha=0.5)
-        
-    #     # 첫 번째 행에만 범례 표시 (깔끔하게)
-    #     if idx == 0:
-    #         ax_syndrome_prob.legend()
-
-    # plt.tight_layout()
-    # plt.show()
 
 
 # %%
-def plot_figure5_c(det_results):
+def plot_figure5_c(state_builders,shots):
     fig, axes = plt.subplots(2, 2, figsize=(15, 12))
 
     state_labels = ['0', '1', '+', '-']
@@ -351,7 +404,8 @@ def plot_figure5_c(det_results):
     markers = ['s', 'o', '^']
 
     for idx, state in enumerate(state_labels):
-        det_result = det_results[state]
+        circuit = state_builders[state].get_circuit()
+        det_result = circuit.compile_detector_sampler().sample(shots=shots)
         
         num_ancillas =  len(ANCILLA_QUBITS)
         num_rounds = det_result.shape[1] // num_ancillas # +1 for state prep round
@@ -386,13 +440,13 @@ def plot_figure5_c(det_results):
         ax.set_xlabel("Syndrome Extraction Round")
         ax.set_ylabel("Success Probability")
         ax.set_xticks(range(num_rounds))
-        ax.set_yticks([1e-3, 1e-2, 1e-1, 1])
+        ax.set_yticks([1e-4, 1e-3, 1e-2, 1e-1, 1])
 
 
     plt.show()
 
 #%%
-def plot_figure5_d(det_results):
+def plot_figure5_d(state_builders, shots):
     fig, axes = plt.subplots(2, 2, figsize=(15, 12))
 
     state_labels = ['0', '1', '+', '-']
@@ -400,7 +454,8 @@ def plot_figure5_d(det_results):
     markers = ['s', 'o', '^', 'D']
 
     for idx, state in enumerate(state_labels):
-        det_result = det_results[state]
+        circuit = state_builders[state].get_circuit()
+        det_result = circuit.compile_detector_sampler().sample(shots=shots)
         
         num_ancillas =  len(ANCILLA_QUBITS)
         num_rounds = det_result.shape[1] // num_ancillas # +1 for state prep round

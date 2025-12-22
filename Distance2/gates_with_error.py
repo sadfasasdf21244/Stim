@@ -23,8 +23,8 @@ ALL_QUBITS = DATA_QUBITS + ANCILLA_QUBITS
 # 1. 사용자 정의 Builder 클래스 (수정하신 버전)
 # ==========================================
 
-class TransmonBuilder:
-    def __init__(self, p_1q, p_2q, p_meas, p_1q_z=0, squence_time = 2, T1 = 10, T2 = 10):
+class CircuitBuilder:
+    def __init__(self, p_1q, p_2q, p_meas, p_1q_z=0, squence_time = 0, T1 = 10, T2 = 15):
         self.circuit = stim.Circuit()
         self.p_1q = p_1q      
         self.p_2q = p_2q           
@@ -34,7 +34,7 @@ class TransmonBuilder:
         self.T1 = T1
         self.T2 = T2
         self.T1_error_rate = 1 - np.exp(- self.squence_time / self.T1)
-        self.T2_error_rate = 1 - np.exp( self.squence_time / self.T2)
+        self.T2_error_rate = (1 - np.exp( - self.squence_time / 16/ self.T2))/2
 
 
     def _add_noise_1q(self, target):
@@ -55,7 +55,8 @@ class TransmonBuilder:
 
     def _add_T2_noise(self, target):    
         if self.T2_error_rate > 0:
-            self.circuit.append("DEPOLARIZE1", [target], self.T2_error_rate)
+            for target_t2 in target:
+                self.circuit.append("Z_ERROR", [target_t2], self.T2_error_rate)
 
     # 1. Pi Rotations
     def pi_x(self, target):
@@ -108,37 +109,57 @@ class TransmonBuilder:
     def get_circuit(self):
         return self.circuit    
     
-    def measure_all(self, is_first_round = False, A2_basis = 'X'):
+    def measure_ancilla(self, is_first_round = False, A2_basis = 'X'):       
         if A2_basis == 'X':
             self.pi_half_y(D1)
             self.pi_half_y(D2)
             self.pi_half_y(D3)
             self.pi_half_y(D4)
+            self._add_T2_noise(ANCILLA_QUBITS)
         
-        self.minus_pi_half_y(A2) 
+        self.minus_pi_half_y(A2)
+        self._add_T2_noise([D1, D2, D3, D4, A1, A3])
         self.cz(D1, A2)
+        self._add_T2_noise([D2, D3, D4, A1, A3])
         self.cz(D2, A2)
+        self._add_T2_noise([D1, D3, D4, A1, A3])
         self.cz(D3, A2)
+        self._add_T2_noise([D1, D2, D4, A1, A3])
         self.cz(D4, A2)
+        self._add_T2_noise([D1, D2, D3, A1, A3])
         self.pi_half_y(A2)
+        self._add_T2_noise([D1, D2, D3, D4, A1, A3])
         self.measure_z(A2)
+        self._add_T2_noise([D1, D2, D3, D4, A1, A3])
 
         if A2_basis == 'X':
             self.minus_pi_half_y(D1)
             self.minus_pi_half_y(D2)
             self.minus_pi_half_y(D3)
             self.minus_pi_half_y(D4)
+            self._add_T2_noise(ANCILLA_QUBITS)
 
         self.minus_pi_half_y(A1)
+        self._add_T2_noise([D1, D2, D3, D4, A2, A3])
         self.minus_pi_half_y(A3)
+        self._add_T2_noise([D1, D2, D3, D4, A1, A2])
         self.cz(D3, A1)
+        self._add_T2_noise([D1, D2, D4, A2, A3])
         self.cz(D4, A3)
+        self._add_T2_noise([D1, D2, D3, A1, A2])
         self.cz(D1, A1)
+        self._add_T2_noise([D2, D3, D4, A2, A3])
         self.cz(D2, A3)
+        self._add_T2_noise([D1, D3, D4, A1, A2])
         self.pi_half_y(A1)
+        self._add_T2_noise([D1, D2, D3, D4, A1, A2])
         self.pi_half_y(A3)
+        self._add_T2_noise([D1, D2, D3, D4, A1, A2])
+
         self.measure_z(A1)
+        self._add_T2_noise([D1, D2, D3, D4, A2, A3])
         self.measure_z(A3)
+        self._add_T2_noise([D1, D2, D3, D4, A1, A2])
 
         if is_first_round:
             self.circuit.append("DETECTOR", [stim.target_rec(-3)])
@@ -149,6 +170,49 @@ class TransmonBuilder:
             self.circuit.append("DETECTOR", [stim.target_rec(-2), stim.target_rec(-5)])
             self.circuit.append("DETECTOR", [stim.target_rec(-1), stim.target_rec(-4)])
 
-        for qubit in ALL_QUBITS:
-            # self._add_T1_noise([qubit])
-            self._add_T2_noise([qubit])
+    def measure_data(self, basis = 'Z'):
+        if basis == 'X':
+            self.minus_pi_half_y(D1)
+            self.minus_pi_half_y(D2)
+            self.minus_pi_half_y(D3)
+            self.minus_pi_half_y(D4)
+
+        
+        if basis == 'Y':
+            self.pi_half_x(D1)
+            self.pi_half_x(D2)
+            self.pi_half_x(D3)
+            self.pi_half_x(D4)
+
+        self.measure_z(D1)
+        self.measure_z(D2)
+        self.measure_z(D3)
+        self.measure_z(D4)
+
+        if basis == 'X':
+            self.pi_half_y(D1)
+            self.pi_half_y(D2)
+            self.pi_half_y(D3)
+            self.pi_half_y(D4)
+
+        if basis == 'Y':
+            self.minus_pi_half_x(D1)
+            self.minus_pi_half_x(D2)
+            self.minus_pi_half_x(D3)
+            self.minus_pi_half_x(D4)
+
+    def measure_arbitrary(self, qubit_list: list[int], basis = 'Z'):
+        for qubit in qubit_list:
+            if basis == 'X':
+                self.minus_pi_half_y(qubit)
+            elif basis == 'Y':
+                self.pi_half_x(qubit)
+
+        for qubit in qubit_list:
+            self.measure_z(qubit)
+
+        for qubit in qubit_list:
+            if basis == 'X':
+                self.pi_half_y(qubit)
+            elif basis == 'Y':
+                self.minus_pi_half_x(qubit)
