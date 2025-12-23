@@ -34,7 +34,7 @@ class CircuitBuilder:
         self.T1 = T1
         self.T2 = T2
         self.T1_error_rate = 1 - np.exp(- self.squence_time / self.T1)
-        self.T2_error_rate = (1 - np.exp( - self.squence_time / 16/ self.T2))/2
+        self.T2_error_rate = (1 - np.exp( - self.squence_time / 16/ self.T2))
 
 
     def _add_noise_1q(self, target):

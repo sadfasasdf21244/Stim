@@ -41,13 +41,14 @@ def load_complex_matrix_from_text(file_path):
 # 1. 텍스트 파일 이름 지정 (사용자님의 파일 경로)
 state = '+'
 
-file_name = 'Distance2/testing/'+state+'state_density_matrix.txt'
+file_name = 'Distance2/Datas/test_0000state.txt'
 
 # (테스트를 위해 파일이 없으면 생성하는 코드입니다. 실제로는 이 부분 건너뛰세요)
 import os
 
 # 2. 불러오기
 rho_loaded = load_complex_matrix_from_text(file_name)
+print(f"trace = {np.trace(rho_loaded)}")
 
 logical = {}
 logical[0] = np.zeros(16)

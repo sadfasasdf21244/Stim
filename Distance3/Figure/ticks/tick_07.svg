@@ -1,0 +1,37 @@
+<svg viewBox="0 0 431.529 431.529"  version="1.1" xmlns="http://www.w3.org/2000/svg">
+<g id="qubit_dots">
+<circle id="qubit_dot:1:1_1:7" cx="125.255" cy="125.255" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:2:2_0:7" cx="170.51" cy="80" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:3:3_1:7" cx="215.764" cy="125.255" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:5:5_1:7" cx="306.274" cy="125.255" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:8:1_3:7" cx="125.255" cy="215.764" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:9:2_2:7" cx="170.51" cy="170.51" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:10:3_3:7" cx="215.764" cy="215.764" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:11:4_2:7" cx="261.019" cy="170.51" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:12:5_3:7" cx="306.274" cy="215.764" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:13:6_2:7" cx="351.529" cy="170.51" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:14:0_4:7" cx="80" cy="261.019" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:15:1_5:7" cx="125.255" cy="306.274" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:16:2_4:7" cx="170.51" cy="261.019" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:17:3_5:7" cx="215.764" cy="306.274" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:18:4_4:7" cx="261.019" cy="261.019" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:19:5_5:7" cx="306.274" cy="306.274" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:25:4_6:7" cx="261.019" cy="351.529" r="2" stroke="none" fill="black"/>
+</g>
+<rect x="154.51" y="64" width="32" height="32" stroke="black" fill="black"/>
+<text dominant-baseline="central" text-anchor="middle" font-family="monospace" font-size="24" x="170.51" y="80" fill="white">MR</text>
+<rect x="154.51" y="154.51" width="32" height="32" stroke="black" fill="black"/>
+<text dominant-baseline="central" text-anchor="middle" font-family="monospace" font-size="24" x="170.51" y="170.51" fill="white">MR</text>
+<rect x="245.019" y="154.51" width="32" height="32" stroke="black" fill="black"/>
+<text dominant-baseline="central" text-anchor="middle" font-family="monospace" font-size="24" x="261.019" y="170.51" fill="white">MR</text>
+<rect x="335.529" y="154.51" width="32" height="32" stroke="black" fill="black"/>
+<text dominant-baseline="central" text-anchor="middle" font-family="monospace" font-size="24" x="351.529" y="170.51" fill="white">MR</text>
+<rect x="64" y="245.019" width="32" height="32" stroke="black" fill="black"/>
+<text dominant-baseline="central" text-anchor="middle" font-family="monospace" font-size="24" x="80" y="261.019" fill="white">MR</text>
+<rect x="154.51" y="245.019" width="32" height="32" stroke="black" fill="black"/>
+<text dominant-baseline="central" text-anchor="middle" font-family="monospace" font-size="24" x="170.51" y="261.019" fill="white">MR</text>
+<rect x="245.019" y="245.019" width="32" height="32" stroke="black" fill="black"/>
+<text dominant-baseline="central" text-anchor="middle" font-family="monospace" font-size="24" x="261.019" y="261.019" fill="white">MR</text>
+<rect x="245.019" y="335.529" width="32" height="32" stroke="black" fill="black"/>
+<text dominant-baseline="central" text-anchor="middle" font-family="monospace" font-size="24" x="261.019" y="351.529" fill="white">MR</text>
+</svg>

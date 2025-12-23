@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.cm as cm
 from surface2_functions import *
+from functools import reduce
 
 # 사용자 정의 클래스 및 변수들 (위에서 주신 코드와 동일하다고 가정)
 # D1~D4, A1~A3 정의 및 CircuitBuilder, assignment_matrix 포함
@@ -38,7 +39,7 @@ def tensor_product(ops_list):
 # ==============================================================================
 # 2. 수정된 Tomography Experiment 함수 (Post-selection 포함)
 # ==============================================================================
-def run_tomography_experiments(target_state_name, p_1q, p_2q, p_meas, shots=1000, **kwargs):
+def run_tomography_experiments(target_state_name, p_1q, p_2q, p_meas, shots, **kwargs):
     """
     Args:
         target_state_name (str): '0', '1', '+', '-' 등 준비할 상태 이름
@@ -64,12 +65,15 @@ def run_tomography_experiments(target_state_name, p_1q, p_2q, p_meas, shots=1000
         # 1. 회로 생성 및 타겟 상태 준비 (Ancilla 측정 3개 포함)
         # -------------------------------------------------------
         # kwargs에 p_1q, p_2q 등이 포함되어 있어야 함
-        builder = CircuitBuilder(
-        p_1q=0,   
-        p_2q=0,  
-        p_meas=0,
-        squence_time=0,
+        builder = state_prep(
+        target_state = target_state_name,
+        p_1q=p_1q,
+        p_2q=p_2q,
+        p_meas=p_meas,
+        **kwargs
         )
+
+
         # -------------------------------------------------------
         # 2. 기저 회전 (Data Qubits Measurement Basis Rotation)
         # -------------------------------------------------------
@@ -80,8 +84,6 @@ def run_tomography_experiments(target_state_name, p_1q, p_2q, p_meas, shots=1000
             elif basis == 'Y':
                 builder.pi_half_x(q) # Z -> Y basis
             # Z basis는 회전 없음
-
-        # builder.circuit.append("Y_ERROR", D2, 0.4)
 
         # -------------------------------------------------------
         # 3. 데이터 큐비트 측정 (항상 Z basis로 측정, 측정 4개 추가)
@@ -106,14 +108,14 @@ def run_tomography_experiments(target_state_name, p_1q, p_2q, p_meas, shots=1000
         for sample in raw_samples:
             # [A] Post-selection: 처음 3비트(Ancilla)가 모두 0인지 확인
             # measure_ancilla 내부 순서에 따라 sample[0], sample[1], sample[2]가 해당됨
-            # ancilla_res = sample[:3]
+            ancilla_res = sample[:3]
             
-            # # np.any(ancilla_res)가 False여야 모두 0임
-            # if not np.any(ancilla_res): 
+            # np.any(ancilla_res)가 False여야 모두 0임
+            if not np.any(ancilla_res): 
                 valid_shots += 1
                 
                 # [B] Data Qubits 추출: 인덱스 3부터 끝까지 (D1, D2, D3, D4)
-                data_res = sample
+                data_res = sample[3:]
                 
                 # [C] 비트스트링 -> 정수 인덱스 변환
                 # D4(LSB) -> D1(MSB) 순서 가정 (sample 순서와 measure_arbitrary 순서 일치 확인 필요)
@@ -122,6 +124,7 @@ def run_tomography_experiments(target_state_name, p_1q, p_2q, p_meas, shots=1000
                     if bit:
                         idx += (1 << 3-k)
                 counts[idx] += 1
+
         
         # (선택 사항) 만약 valid_shots가 너무 적으면 경고 출력
         # if valid_shots < shots * 0.1:
@@ -212,7 +215,7 @@ def perform_mle_4q(measured_data, assignment_mat):
     res = minimize(cost_func, init_params,method='SLSQP',  # 방법 변경
     options={
         'maxiter': 200000,
-        'ftol': 1e-30, # SLSQP에서의 허용 오차 옵션
+        'ftol': 1e-40, # SLSQP에서의 허용 오차 옵션
         'disp': True
     })
     
@@ -301,7 +304,6 @@ def plot_density_matrix_3d(rho, title_prefix="Density Matrix"):
     ax2.set_xticklabels(tick_labels, rotation=45, ha='right', fontsize=8)
     ax2.set_yticklabels(tick_labels, rotation=-20, ha='left', fontsize=8)
     ax2.set_zlim(np.min(dz_imag), np.max(dz_imag) if np.max(dz_imag) > 0 else 0.1)
-
     plt.tight_layout()
     plt.show()
 
@@ -309,8 +311,100 @@ def plot_density_matrix_3d(rho, title_prefix="Density Matrix"):
 # 4. 실행 예시
 # ==============================================================================
 
-def density_matrix(target_state, p_1q, p_2q, p_meas, shots, **kwargs): 
+def get_shadow_tables():
+    """
+    단일 큐비트 Pauli Shadow 스냅샷 행렬을 미리 계산하여 반환합니다.
+    공식: rho_snapshot = 3 * |psi><psi| - I
+    """
+    I = np.eye(2, dtype=complex)
+    
+    # 기저별 고유상태(Eigenstates) 정의
+    # Z basis
+    z0 = np.array([[1], [0]], dtype=complex) # |0>
+    z1 = np.array([[0], [1]], dtype=complex) # |1>
+    
+    # X basis (|0> +/- |1>) / sqrt(2)
+    x0 = (z0 + z1) / np.sqrt(2) # |+>
+    x1 = (z0 - z1) / np.sqrt(2) # |->
+    
+    # Y basis (|0> +/- i|1>) / sqrt(2)
+    y0 = (z0 + 1j * z1) / np.sqrt(2) # |+i>
+    y1 = (z0 - 1j * z1) / np.sqrt(2) # |-i>
 
+    # 스냅샷 행렬 생성 함수: 3 * (|psi><psi|) - I
+    def snapshot(state):
+        return 3 * (state @ state.conj().T) - I
+
+    # 미리 계산된 룩업 테이블 (속도 최적화)
+    # 키: (기저 'X','Y','Z', 결과비트 0,1)
+    tables = {
+        ('X', 0): snapshot(x0),
+        ('X', 1): snapshot(x1),
+        ('Y', 0): snapshot(y0),
+        ('Y', 1): snapshot(y1),
+        ('Z', 0): snapshot(z0),
+        ('Z', 1): snapshot(z1),
+    }
+    return tables
+
+def reconstruct_pauli_shadow_4q(measured_data):
+    """
+    Pauli Shadow 방식을 이용해 4큐비트 밀도 행렬을 재구성합니다.
+    
+    Args:
+        measured_data: { 'XYZI': [count_0, ..., count_15], ... } 형태의 딕셔너리
+        
+    Returns:
+        rho (16x16 numpy array): 재구성된 밀도 행렬
+    """
+    print("Pauli Shadow 재구성을 시작합니다. (최적화 과정 없음)")
+    
+    dim = 16
+    rho_accum = np.zeros((dim, dim), dtype=complex)
+    total_shots = 0
+    
+    # 1. 단일 큐비트 스냅샷 룩업 테이블 로드
+    shadow_tables = get_shadow_tables()
+    
+    # 2. 모든 측정 데이터 순회
+    for basis_config, counts in measured_data.items():
+        # basis_config 예: "XZZI" (4글자)
+        
+        # counts는 길이 16인 배열 (index 0~15는 측정 결과 0000~1111에 대응)
+        for outcome_int, count in enumerate(counts):
+            if count == 0:
+                continue
+                
+            # 해당 outcome_int에 대한 4큐비트 스냅샷 생성
+            # 스냅샷 = kron(snapshot_q0, snapshot_q1, snapshot_q2, snapshot_q3)
+            snapshots = []
+            
+            for i in range(4): # 4 Qubits
+                basis_char = basis_config[i] # 해당 큐비트의 측정 기저 (X, Y, Z)
+                
+                # outcome_int의 i번째 비트 추출 (0 또는 1)
+                # 주의: 큐비트 순서(Little Endian vs Big Endian)에 따라 shift 방향 확인 필요
+                # 여기서는 outcome_int >> i 로 i번째 큐비트 값을 가져온다고 가정
+                bit = (outcome_int >> 3-i) & 1
+                
+                # 미리 계산된 테이블에서 행렬 가져오기
+                snapshots.append(shadow_tables[(basis_char, bit)])
+            
+            # 텐서 곱으로 전체 시스템의 스냅샷 생성
+            # reduce(np.kron, [A, B, C, D]) -> A (x) B (x) C (x) D
+            full_snapshot = reduce(np.kron, snapshots)
+            
+            # 평균을 위해 누적 (count만큼 가중치)
+            rho_accum += full_snapshot * count
+            total_shots += count
+            
+    # 3. 전체 샷 수로 나누어 평균 계산
+    rho_est = rho_accum / total_shots
+    
+    return rho_est
+
+def density_matrix(target_state, p_1q, p_2q, p_meas, shots, with_plot = True, save_directory = "", **kwargs): 
+    
     print("1. Assignment Matrix 계산 중...")
     A_matrix = assignment_matrix(
         qubits=[D1, D2, D3, D4], 
@@ -320,11 +414,6 @@ def density_matrix(target_state, p_1q, p_2q, p_meas, shots, **kwargs):
         shots=shots, 
         **kwargs
     )
-
-    print(A_matrix)
-    # A 행렬은 Z basis 기준입니다. 
-    # 회로에서 Basis Change는 측정 '전'에 일어나므로, 측정 자체는 항상 Z basis에서 수행됩니다.
-    # 따라서 A 행렬 하나만 구해서 모든 기저 실험에 공통으로 사용하면 됩니다.
 
     print("2. Tomography 데이터 수집 중 (81 circuits)...")
     tomo_data = run_tomography_experiments(
@@ -336,16 +425,13 @@ def density_matrix(target_state, p_1q, p_2q, p_meas, shots, **kwargs):
         **kwargs
     )
 
-    # [Step 3] MLE 수행
-    final_rho = perform_mle_4q(tomo_data, A_matrix)
+    # [Step 3] MLE (Pauli Shadow Reconstruct) 수행
+    # 코드 문맥상 reconstruct_pauli_shadow_4q를 사용하는 것으로 보임
+    final_rho = reconstruct_pauli_shadow_4q(tomo_data)
 
-    print(f"\n=== 복원된 {target_state}state의 Density Matrix (Top-left 4x4) ===")
-    print(np.round(final_rho[:, :], 3))
-    plot_density_matrix_3d(final_rho, title_prefix="Reconstructed State (Example)")
-    # Fidelity 확인 (Target: |Phi+> (x) |00>)
-    # (타겟 상태 정의는 생략함)
-    
-    # physical fidelity, probability, rho logical 확인
+    # ---------------------------------------------------------
+    # Logical Metrics Calculation
+    # ---------------------------------------------------------
     logical = {}
     logical[0] = np.zeros(16)
     logical[0][0b0000] = 1/np.sqrt(2)
@@ -354,26 +440,185 @@ def density_matrix(target_state, p_1q, p_2q, p_meas, shots, **kwargs):
     logical[1] = np.zeros(16)
     logical[1][0b0101] = 1/np.sqrt(2)
     logical[1][0b1010] = 1/np.sqrt(2)
-    match target_state:
-        case '0':
-            psi = logical[0]
-        case '1':
-            psi = logical[1]
-        case '+':
-            psi = 1/np.sqrt(2)*(logical[0]+logical[1])
-        case '-':
-            psi = 1/np.sqrt(2)*(logical[0]-logical[1])
+    
+    psi = None
+    if target_state == '0':
+        psi = logical[0]
+    elif target_state == '1':
+        psi = logical[1]
+    elif target_state == '+':
+        psi = (logical[0] + logical[1]) / np.sqrt(2)
+    elif target_state == '-':
+        psi = (logical[0] - logical[1]) / np.sqrt(2)
+    else:
+        print(f"Warning: Unknown target state '{target_state}'. Using |0>L for fidelity.")
+        psi = logical[0]
 
-    Logical_probability = logical[0].T @ final_rho @ logical[0] + logical[1].T @ final_rho @ logical[1]
+    # Yield (Physical Probability PL) 계산
+    # P_L = <0_L|rho|0_L> + <1_L|rho|1_L> (Unnormalized projectors sum)
+    # 주의: logical 벡터들이 normalized 되어 있다면, 아래 식은 P_L을 구하는 올바른 식입니다.
+    # 논문 식: P_L = Trace(P_code * rho)
+    Logical_probability = (logical[0].T @ final_rho @ logical[0] + 
+                           logical[1].T @ final_rho @ logical[1]).real.item()
+
+    # Logical Density Matrix (rho_logical) 계산
+    # rho_L = Project / P_L
     rho_logical = np.zeros([2, 2], dtype=complex)
+    if Logical_probability > 1e-9:
+        for i in range(2):
+            for j in range(2):
+                val = logical[i].T @ final_rho @ logical[j]
+                rho_logical[i][j] = val / Logical_probability
+    else:
+        print("Warning: Logical probability is too low to normalize.")
 
-    for i in range(2):
-        for j in range(2):
-            rho_logical[i][j] = logical[i].T @ final_rho @ logical[j] / Logical_probability
+    # Physical Fidelity Calculation
+    Physical_Fidelity = (psi.T @ final_rho @ psi).real.item()
 
-    Phisical_Fidelity = (psi.T @ final_rho @ psi).real
-    print(f"Phisical Fidelity Fphys : {Phisical_Fidelity:.3f}")
-    print(f"physical probability PL : {Logical_probability:.3f}")
-    print(rho_logical)
+    print(f"\n--- Metrics ---")
+    print(f"Physical Fidelity (F_phys) : {Physical_Fidelity:.3f}")
+    print(f"Logical Yield (P_L)        : {Logical_probability:.3f}")
+    print("Logical Density Matrix (rho_L):")
+    print(np.round(rho_logical, 3))
+
+    # ---------------------------------------------------------
+    # Plotting & Saving
+    # ---------------------------------------------------------
+    # 파일명 생성
+    param_str = f"Shots_{shots}_p1q_{p_1q}_p2q_{p_2q}_pmeas_{p_meas}"
+    # kwargs에 있는 추가 파라미터(T1, T2 등) 파일명에 추가
+    exclude_keys = ['save_directory', 'with_plot']
+    if kwargs:
+        for key, value in kwargs.items():
+            if key not in exclude_keys:
+                param_str += f"_{key}_{value}"
+    
+    filename = f"DensityMat_{target_state}_{param_str}.png"
+    
+    # Metrics 딕셔너리 포장
+    metrics_dict = {
+        'F_phys': Physical_Fidelity,
+        'P_L': Logical_probability
+    }
+
+    # 통합 플롯 함수 호출
+    plot_density_matrix_combined(
+        rho_phys=final_rho,
+        rho_logical=rho_logical,
+        metrics=metrics_dict,
+        title_prefix=f"Target State |{target_state}⟩",
+        save_dir=save_directory,
+        filename=filename,
+        with_plot=with_plot
+    )
 
     return final_rho
+
+def plot_density_matrix_combined(rho_phys, rho_logical, metrics, title_prefix, save_dir, filename, with_plot):
+    """
+    Physical Density Matrix (16x16)의 실수/허수부와 
+    Logical Density Matrix (2x2)의 실수부를 함께 시각화합니다.
+    """
+    fig = plt.figure(figsize=(24, 7))
+    
+    # 텍스트 정보 (Title)
+    f_phys = metrics.get('F_phys', 0)
+    p_L = metrics.get('P_L', 0)
+    main_title = (f"{title_prefix}\n"
+                  f"Physical Fidelity ($F_{{phys}}$): {f_phys:.3f} | "
+                  f"Yield ($P_L$): {p_L:.3f}")
+    fig.suptitle(main_title, fontsize=16, fontweight='bold')
+
+    # ------------------------------------------------
+    # Plot 1: Physical Real Part (16x16)
+    # ------------------------------------------------
+    ax1 = fig.add_subplot(131, projection='3d')
+    _plot_3d_bar(ax1, rho_phys.real, "Physical Re[$\\rho$]", 16)
+
+    # ------------------------------------------------
+    # Plot 2: Physical Imag Part (16x16)
+    # ------------------------------------------------
+    ax2 = fig.add_subplot(132, projection='3d')
+    _plot_3d_bar(ax2, rho_phys.imag, "Physical Im[$\\rho$]", 16, is_imag=True)
+
+    # ------------------------------------------------
+    # Plot 3: Logical Real Part (2x2) - Figure 4c 스타일
+    # ------------------------------------------------
+    ax3 = fig.add_subplot(133, projection='3d')
+    # 논리적 큐비트 라벨
+    tick_labels_logical = [r'$|0\rangle_L$', r'$|1\rangle_L$']
+    _plot_3d_bar(ax3, rho_logical.real, "Logical Re[$\\rho_L$]", 2, tick_labels=tick_labels_logical)
+
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.85) # 제목 공간 확보
+
+    # ------------------------------------------------
+    # 파일 저장 (Save Logic)
+    # ------------------------------------------------
+    if save_dir and save_dir != "":
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+            print(f"📂 폴더 생성: {save_dir}")
+        
+        full_path = os.path.join(save_dir, filename)
+        plt.savefig(full_path, bbox_inches='tight')
+        print(f"💾 그래프 저장 완료: {full_path}")
+
+    # ------------------------------------------------
+    # 출력 (Show Logic)
+    # ------------------------------------------------
+    if with_plot:
+        plt.show()
+    else:
+        plt.close(fig) # 메모리 해제
+
+def _plot_3d_bar(ax, matrix_part, title, dim, is_imag=False, tick_labels=None):
+    """3D Bar Plot을 그리는 내부 헬퍼 함수"""
+    _x = np.arange(dim)
+    _y = np.arange(dim)
+    _xx, _yy = np.meshgrid(_x, _y)
+    x, y = _xx.ravel(), _yy.ravel()
+    z = np.zeros_like(x)
+    
+    data = matrix_part.ravel()
+    dx = dy = 0.6
+    
+    # 색상 설정
+    if is_imag and np.all(data == 0):
+        colors = 'cyan'
+    else:
+        # 값이 너무 작으면 정규화 시 에러 발생 방지
+        max_val = np.max(np.abs(data))
+        if max_val < 1e-9:
+             colors = cm.coolwarm(0.5)
+        else:
+            offset = data + max_val
+            fracs = offset.astype(float) / (2 * max_val)
+            norm = plt.Normalize(0, 1)
+            colors = cm.coolwarm(norm(fracs))
+
+    ax.bar3d(x, y, z, dx, dy, data, color=colors, shade=True)
+    ax.set_title(title)
+    
+    # 축 라벨 설정
+    if tick_labels is None:
+        # 기본 16차원 라벨 (0000 ~ 1111)
+        tick_labels = [f"{i:04b}" for i in range(dim)]
+        
+    ax.set_xticks(np.arange(dim) + dx/2)
+    ax.set_yticks(np.arange(dim) + dy/2)
+    
+    # 16개일 때는 글자 크기 줄이고 회전, 2개일 때는 크게
+    fontsize = 8 if dim > 4 else 12
+    rotation_x = 45 if dim > 4 else 0
+    rotation_y = -20 if dim > 4 else 0
+    
+    ax.set_xticklabels(tick_labels, rotation=rotation_x, ha='right', fontsize=fontsize)
+    ax.set_yticklabels(tick_labels, rotation=rotation_y, ha='left', fontsize=fontsize)
+    
+    # Z축 범위 설정 (Logical은 0~1 사이가 많음)
+    z_min, z_max = np.min(data), np.max(data)
+    if dim == 2: # Logical
+        ax.set_zlim(0, 1.0)
+    else:
+        ax.set_zlim(z_min, max(z_max, 0.1))

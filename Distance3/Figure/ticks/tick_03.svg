@@ -1,0 +1,45 @@
+<svg viewBox="0 0 431.529 431.529"  version="1.1" xmlns="http://www.w3.org/2000/svg">
+<g id="qubit_dots">
+<circle id="qubit_dot:1:1_1:3" cx="125.255" cy="125.255" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:2:2_0:3" cx="170.51" cy="80" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:3:3_1:3" cx="215.764" cy="125.255" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:5:5_1:3" cx="306.274" cy="125.255" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:8:1_3:3" cx="125.255" cy="215.764" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:9:2_2:3" cx="170.51" cy="170.51" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:10:3_3:3" cx="215.764" cy="215.764" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:11:4_2:3" cx="261.019" cy="170.51" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:12:5_3:3" cx="306.274" cy="215.764" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:13:6_2:3" cx="351.529" cy="170.51" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:14:0_4:3" cx="80" cy="261.019" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:15:1_5:3" cx="125.255" cy="306.274" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:16:2_4:3" cx="170.51" cy="261.019" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:17:3_5:3" cx="215.764" cy="306.274" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:18:4_4:3" cx="261.019" cy="261.019" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:19:5_5:3" cx="306.274" cy="306.274" r="2" stroke="none" fill="black"/>
+<circle id="qubit_dot:25:4_6:3" cx="261.019" cy="351.529" r="2" stroke="none" fill="black"/>
+</g>
+<path d="M170.51,80 L125.255,125.255 " fill="none" stroke="black" stroke-width="5"/>
+<circle cx="170.51" cy="80" r="12" stroke="none" fill="black"/>
+<circle cx="125.255" cy="125.255" r="12" stroke="black" fill="white"/>
+<path d="M113.255,125.255 L137.255,125.255 M125.255,113.255 L125.255,137.255 " stroke="black"/>
+<path d="M170.51,261.019 L125.255,306.274 " fill="none" stroke="black" stroke-width="5"/>
+<circle cx="170.51" cy="261.019" r="12" stroke="none" fill="black"/>
+<circle cx="125.255" cy="306.274" r="12" stroke="black" fill="white"/>
+<path d="M113.255,306.274 L137.255,306.274 M125.255,294.274 L125.255,318.274 " stroke="black"/>
+<path d="M261.019,170.51 L215.764,215.764 " fill="none" stroke="black" stroke-width="5"/>
+<circle cx="261.019" cy="170.51" r="12" stroke="none" fill="black"/>
+<circle cx="215.764" cy="215.764" r="12" stroke="black" fill="white"/>
+<path d="M203.764,215.764 L227.764,215.764 M215.764,203.764 L215.764,227.764 " stroke="black"/>
+<path d="M125.255,215.764 L80,261.019 " fill="none" stroke="black" stroke-width="5"/>
+<circle cx="125.255" cy="215.764" r="12" stroke="none" fill="black"/>
+<circle cx="80" cy="261.019" r="12" stroke="black" fill="white"/>
+<path d="M68,261.019 L92,261.019 M80,249.019 L80,273.019 " stroke="black"/>
+<path d="M215.764,125.255 L170.51,170.51 " fill="none" stroke="black" stroke-width="5"/>
+<circle cx="215.764" cy="125.255" r="12" stroke="none" fill="black"/>
+<circle cx="170.51" cy="170.51" r="12" stroke="black" fill="white"/>
+<path d="M158.51,170.51 L182.51,170.51 M170.51,158.51 L170.51,182.51 " stroke="black"/>
+<path d="M306.274,215.764 L261.019,261.019 " fill="none" stroke="black" stroke-width="5"/>
+<circle cx="306.274" cy="215.764" r="12" stroke="none" fill="black"/>
+<circle cx="261.019" cy="261.019" r="12" stroke="black" fill="white"/>
+<path d="M249.019,261.019 L273.019,261.019 M261.019,249.019 L261.019,273.019 " stroke="black"/>
+</svg>
