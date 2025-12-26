@@ -66,19 +66,19 @@ def run_tomography_experiments(target_state_name, p_1q, p_2q, p_meas, shots, **k
         # 1. 회로 생성 및 타겟 상태 준비 (Ancilla 측정 3개 포함)
         # -------------------------------------------------------
         # kwargs에 p_1q, p_2q 등이 포함되어 있어야 함
-        builder = CircuitBuilder(p_1q=p_1q,
-                                 p_2q=p_2q,
-                                 p_meas=p_meas,
-                                 **kwargs)
+        builder = state_prep(
+        target_state = target_state_name,
+        p_1q=p_1q,
+        p_2q=p_2q,
+        p_meas=p_meas,
+        **kwargs
+        )
         
-        # state_prep(
-        # target_state = target_state_name,
-        # p_1q=p_1q,
-        # p_2q=p_2q,
-        # p_meas=p_meas,
-        # **kwargs
-        # )
-
+        ## 테스트 용으로
+        # CircuitBuilder(p_1q=p_1q,
+        #                          p_2q=p_2q,
+        #                          p_meas=p_meas,
+        #                          **kwargs)
 
         # -------------------------------------------------------
         # 2. 기저 회전 (Data Qubits Measurement Basis Rotation)
