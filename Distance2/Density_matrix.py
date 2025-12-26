@@ -10,6 +10,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.cm as cm
 from surface2_functions import *
 from functools import reduce
+import matplotlib.pyplot as plt
 
 # 사용자 정의 클래스 및 변수들 (위에서 주신 코드와 동일하다고 가정)
 # D1~D4, A1~A3 정의 및 CircuitBuilder, assignment_matrix 포함
@@ -65,13 +66,18 @@ def run_tomography_experiments(target_state_name, p_1q, p_2q, p_meas, shots, **k
         # 1. 회로 생성 및 타겟 상태 준비 (Ancilla 측정 3개 포함)
         # -------------------------------------------------------
         # kwargs에 p_1q, p_2q 등이 포함되어 있어야 함
-        builder = state_prep(
-        target_state = target_state_name,
-        p_1q=p_1q,
-        p_2q=p_2q,
-        p_meas=p_meas,
-        **kwargs
-        )
+        builder = CircuitBuilder(p_1q=p_1q,
+                                 p_2q=p_2q,
+                                 p_meas=p_meas,
+                                 **kwargs)
+        
+        # state_prep(
+        # target_state = target_state_name,
+        # p_1q=p_1q,
+        # p_2q=p_2q,
+        # p_meas=p_meas,
+        # **kwargs
+        # )
 
 
         # -------------------------------------------------------
@@ -174,7 +180,7 @@ def perform_mle_4q(measured_data, assignment_mat):
             ops = []
             for i, basis_char in enumerate(basis_config):
                 # i번째 큐비트의 결과 비트 (0 or 1)
-                bit = (outcome_int >> i) & 1
+                bit = (outcome_int >> 3-i) & 1
                 ops.append(local_projectors[basis_char][bit])
             
             # P = P1 (x) P2 (x) P3 (x) P4
@@ -185,7 +191,7 @@ def perform_mle_4q(measured_data, assignment_mat):
     def cost_func(params):
         rho = params_to_rho_4q(params)
         loss = 0.0
-        epsilon = 1e-20
+        epsilon = 1e-10
         
         # 81가지 실험 데이터 순회
         for basis_config, counts in measured_data.items():
@@ -212,10 +218,12 @@ def perform_mle_4q(measured_data, assignment_mat):
     init_params = np.random.rand(num_params) * 0.01
     init_params[0:16] += 1.0 / np.sqrt(dim) # 대각선 초기화
     
-    res = minimize(cost_func, init_params,method='SLSQP',  # 방법 변경
+    res = minimize(cost_func, init_params,method='L-BFGS-B', 
     options={
-        'maxiter': 200000,
-        'ftol': 1e-40, # SLSQP에서의 허용 오차 옵션
+        'maxiter': 10000,      
+        'maxfun': 500000,     
+        'ftol': 2.220446049250313e-09, # (기본값) -> 1e-15 로 변경
+        'gtol': 1e-12,
         'disp': True
     })
     
@@ -427,7 +435,10 @@ def density_matrix(target_state, p_1q, p_2q, p_meas, shots, with_plot = True, sa
 
     # [Step 3] MLE (Pauli Shadow Reconstruct) 수행
     # 코드 문맥상 reconstruct_pauli_shadow_4q를 사용하는 것으로 보임
-    final_rho = reconstruct_pauli_shadow_4q(tomo_data)
+    final_rho = perform_mle_4q(tomo_data, A_matrix)
+
+    # perform_mle_4q(tomo_data, A_matrix)
+    # reconstruct_pauli_shadow_4q(tomo_data)
 
     # ---------------------------------------------------------
     # Logical Metrics Calculation
@@ -474,7 +485,7 @@ def density_matrix(target_state, p_1q, p_2q, p_meas, shots, with_plot = True, sa
 
     # Physical Fidelity Calculation
     Physical_Fidelity = (psi.T @ final_rho @ psi).real.item()
-
+    Logical_Fidelity = Physical_Fidelity / Logical_probability
     print(f"\n--- Metrics ---")
     print(f"Physical Fidelity (F_phys) : {Physical_Fidelity:.3f}")
     print(f"Logical Yield (P_L)        : {Logical_probability:.3f}")
@@ -498,7 +509,8 @@ def density_matrix(target_state, p_1q, p_2q, p_meas, shots, with_plot = True, sa
     # Metrics 딕셔너리 포장
     metrics_dict = {
         'F_phys': Physical_Fidelity,
-        'P_L': Logical_probability
+        'P_L': Logical_probability,
+        'F_L': Logical_Fidelity
     }
 
     # 통합 플롯 함수 호출
@@ -524,9 +536,11 @@ def plot_density_matrix_combined(rho_phys, rho_logical, metrics, title_prefix, s
     # 텍스트 정보 (Title)
     f_phys = metrics.get('F_phys', 0)
     p_L = metrics.get('P_L', 0)
+    F_L = metrics.get('F_L', 0)
     main_title = (f"{title_prefix}\n"
                   f"Physical Fidelity ($F_{{phys}}$): {f_phys:.3f} | "
-                  f"Yield ($P_L$): {p_L:.3f}")
+                  f"Yield ($P_L$): {p_L:.3f} | "
+                  f"Logical Fidelity ($F_L$): {F_L:.3f}")
     fig.suptitle(main_title, fontsize=16, fontweight='bold')
 
     # ------------------------------------------------
